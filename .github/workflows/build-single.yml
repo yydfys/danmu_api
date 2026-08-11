@@ -1,0 +1,57 @@
+name: Build Single File
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"  # 每天 02:00 UTC 自动构建（约北京时间 10:00）
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build danmu_api.js single file
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build single file
+        run: node build-single.js
+
+      - name: Verify output
+        run: |
+          ls -la dist/
+          test -s dist/danmu_api.js && echo "OK: dist/danmu_api.js exists"
+          node --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: danmu_api.js
+          path: dist/danmu_api.js
+          if-no-files-found: error
+
+      - name: Create Release
+        id: create_release
+        run: |
+          VERSION="$(date +%Y%m%d%H%M)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          gh release create "danmu-${VERSION}" dist/danmu_api.js \
+            --repo "${{ github.repository }}" \
+            --title "danmu_api.js ${VERSION}" \
+            --notes "Auto-built from upstream main (danmu_api single file)" \
+            --latest 2>/dev/null || echo "release maybe exists, skip"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
