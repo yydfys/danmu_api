@@ -2,6 +2,12 @@ name: Build Single File
 
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rebuild even if upstream unchanged'
+        required: false
+        default: 'false'
+        type: boolean
   schedule:
     - cron: "0 2 * * *"  # 每天 02:00 UTC 自动构建（约北京时间 10:00）
   push:
@@ -16,31 +22,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout fork (for build-single.js)
         uses: actions/checkout@v4
+        with:
+          path: fork
+
+      - name: Checkout upstream source (latest main)
+        uses: actions/checkout@v4
+        with:
+          repository: huangxd-/danmu_api
+          path: upstream
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - name: Copy build script and install dependencies
+        run: |
+          cp fork/build-single.js upstream/build-single.js
+          cd upstream
+          npm install
 
       - name: Build single file
-        run: node build-single.js
+        run: |
+          cd upstream
+          node build-single.js
 
       - name: Verify output
         run: |
-          ls -la dist/
-          test -s dist/danmu_api.js && echo "OK: dist/danmu_api.js exists"
+          ls -la upstream/dist/
+          test -s upstream/dist/danmu_api.js && echo "OK: dist/danmu_api.js exists"
           node --version
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: danmu_api.js
-          path: dist/danmu_api.js
+          path: upstream/dist/danmu_api.js
           if-no-files-found: error
 
       - name: Create Release
@@ -48,7 +67,7 @@ jobs:
         run: |
           VERSION="$(date +%Y%m%d%H%M)"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          gh release create "danmu-${VERSION}" dist/danmu_api.js \
+          gh release create "danmu-${VERSION}" upstream/dist/danmu_api.js \
             --repo "${{ github.repository }}" \
             --title "danmu_api.js ${VERSION}" \
             --notes "Auto-built from upstream main (danmu_api single file)" \
